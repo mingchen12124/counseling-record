@@ -1,7 +1,8 @@
 // 所有跟 Firestore 資料庫讀寫有關的函式都放在這裡
 import {
   db, collection, doc, addDoc, updateDoc, deleteDoc,
-  getDocs, getDoc, query, where, orderBy, limit, serverTimestamp
+  getDocs, getDoc, query, where, orderBy, limit, serverTimestamp,
+  writeBatch
 } from "./firebase-init.js";
 
 // ---------- 學生名單 students ----------
@@ -25,6 +26,34 @@ export async function addStudent(student) {
 
 export async function setStudentActive(id, active) {
   return updateDoc(doc(db, "students", id), { active });
+}
+
+// 把貼上的多行文字解析成學生資料
+// 每行格式：班級 姓名 年級（用空白、逗號、Tab 分隔皆可），年級可省略
+// 例如："210 洪峻耀 國二" 或 "210,洪峻耀,國二" 或 "210　洪峻耀"
+export function parseStudentLines(text) {
+  const lines = text.split(/\r?\n/).map(l => l.trim()).filter(l => l);
+  const valid = [];
+  const invalid = [];
+  for (const line of lines) {
+    const parts = line.split(/[\s,，、\t]+/).filter(Boolean);
+    if (parts.length < 2) { invalid.push(line); continue; }
+    const [klass, name, grade] = parts;
+    valid.push({ klass, name, grade: grade || "" });
+  }
+  return { valid, invalid };
+}
+
+// 一次寫入多筆學生資料（用 Firestore batch，一次最多建議 400 筆）
+export async function addStudentsBulk(students) {
+  const batch = writeBatch(db);
+  const col = collection(db, "students");
+  students.forEach(s => {
+    const ref = doc(col);
+    batch.set(ref, { ...s, active: true, createdAt: serverTimestamp() });
+  });
+  await batch.commit();
+  return students.length;
 }
 
 // ---------- 輔導紀錄 records ----------

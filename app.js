@@ -120,9 +120,19 @@ function drawPicker(filterText) {
           <span class="row-class">${s.grade || ""}</span></div>
         </div>`).join("") : `<div class="empty-hint">目前沒有學生資料，請先在下方新增。</div>`}
     </div>
-    <div style="padding:0 20px 8px;">
-      <button class="cta secondary" id="addStudentBtn">＋ 新增學生</button>
+    <div style="padding:0 20px 8px;display:flex;gap:10px;">
+      <button class="cta secondary" id="addStudentBtn" style="flex:1;">＋ 新增學生</button>
+      <button class="cta secondary" id="importBtn" style="flex:1;">📋 匯入名單</button>
     </div>
+    ${state._showImport ? `
+    <div class="card" style="margin:0 20px 14px;">
+      <div class="sec-label">貼上多位學生名單，一行一位</div>
+      <div style="font-size:11.5px;color:var(--text-muted);margin-bottom:8px;line-height:1.6;">
+        格式：班級 姓名 年級（用空白或逗號分隔，年級可省略）<br>例如：<br>210 洪峻耀 國二<br>101 王小明 國一
+      </div>
+      <textarea class="transcript" id="importBox" placeholder="210 洪峻耀 國二&#10;101 王小明 國一"></textarea>
+      <button class="cta" id="importConfirmBtn" style="margin-top:10px;">確認匯入</button>
+    </div>` : ""}
     ${state.selectedStudent ? `
     <div class="teacher-card">${icon('<circle cx="12" cy="8" r="3.5"/><path d="M5 20c0-3.9 3.1-6 7-6s7 2.1 7 6"/>')}
       <div class="teacher-text">已選擇：<b>${state.selectedStudent.klass || ""}${state.selectedStudent.name}</b>（${state.selectedStudent.grade || ""}）</div>
@@ -139,6 +149,9 @@ function drawPicker(filterText) {
   document.getElementById("backBtn").onclick = () => go("#/home");
   document.getElementById("searchBox").oninput = (e) => drawPicker(e.target.value);
   document.getElementById("addStudentBtn").onclick = onAddStudent;
+  document.getElementById("importBtn").onclick = () => { state._showImport = !state._showImport; drawPicker(filterText); };
+  const importConfirmBtn = document.getElementById("importConfirmBtn");
+  if (importConfirmBtn) importConfirmBtn.onclick = () => onImportStudents(filterText);
   document.querySelectorAll(".row").forEach(r => r.onclick = () => {
     state.selectedStudent = state.students.find(s => s.id === r.dataset.id);
     drawPicker(filterText);
@@ -162,6 +175,19 @@ async function onAddStudent() {
   await data.addStudent({ name: name.trim(), klass: klass.trim(), grade: grade.trim() });
   toast("已新增學生");
   renderPicker();
+}
+async function onImportStudents(filterText) {
+  const box = document.getElementById("importBox");
+  const { valid, invalid } = data.parseStudentLines(box.value);
+  if (!valid.length) { toast("沒有解析到任何學生，請檢查格式"); return; }
+  const btn = document.getElementById("importConfirmBtn");
+  btn.disabled = true;
+  btn.textContent = "匯入中…";
+  await data.addStudentsBulk(valid);
+  state._showImport = false;
+  toast(`已匯入 ${valid.length} 位學生${invalid.length ? `，${invalid.length} 行格式錯誤未匯入` : ""}`);
+  if (invalid.length) alert("以下這幾行看不懂格式，沒有匯入：\n" + invalid.join("\n"));
+  await renderPicker();
 }
 
 // ---------------- 語音輸入 ----------------
