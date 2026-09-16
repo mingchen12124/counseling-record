@@ -1,0 +1,15 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // 只有登入且信箱是您本人學校帳號的人，才能讀寫任何資料
+    // 如果之後要開放給更多老師使用，把下面這行改成
+    // request.auth.token.email in ["你的信箱1", "你的信箱2"]
+    function isOwner() {
+      return request.auth != null
+        && request.auth.token.email == "mingchen@yfms.tyc.edu.tw";
+    }
+    match /{document=**} {
+      allow read, write: if isOwner();
+    }
+  }
+}
