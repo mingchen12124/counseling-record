@@ -25,7 +25,7 @@
 ### 2. 建立 GitHub 儲存庫並上線
 1. 到 https://github.com 登入 → 右上角 + →「New repository」
 2. 取名（例如 counseling-record），設為 Public 或 Private 皆可 → Create repository
-3. 把這整個資料夾的檔案（index.html、css、js、firestore.rules）上傳：在 repo 頁面點「uploading an existing file」，把檔案拖進去 → Commit
+3. 把這個資料夾裡「全部的檔案」（index.html、style.css、app.js、data.js、firebase-config.js、firebase-init.js、speech.js、firestore.rules、README.md）一次全選拖進「uploading an existing file」的上傳區（所有檔案都放在同一層，不需要資料夾）→ Commit
 4. 進 repo 的「Settings」→「Pages」→ Source 選「Deploy from a branch」→ Branch 選「main」、資料夾選「/ (root)」→ Save
 5. 等 1-2 分鐘，畫面會顯示網站網址，例如 `https://您的帳號.github.io/counseling-record/`，這就是正式上線網址
 
