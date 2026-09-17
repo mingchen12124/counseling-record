@@ -12,9 +12,23 @@ const state = {
   targetCustom: "",
   transcript: "",
   tags: new Set(),
-  lastRecord: null
+  lastRecord: null,
+  recordDate: todayInputStr(),
+  period: ""
 };
 const ALL_TAGS = ["情緒激動","離座","深呼吸","提示引導","任務分解","增強","替代行為","冷靜角","交回條/聯絡簿","身體不適"];
+const PERIOD_OPTIONS = ["早自習","第1節","第2節","第3節","第4節","午休","第5節","第6節","第7節","第8節","課後","其他"];
+
+function todayInputStr() {
+  const d = new Date();
+  const pad = (n) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+function inputDateToDisplay(iso) {
+  // "2026-09-17" -> "2026/9/17"
+  const [y, m, d] = iso.split("-");
+  return `${y}/${Number(m)}/${Number(d)}`;
+}
 
 // ---------------- 路由 ----------------
 function go(route) { location.hash = route; }
@@ -163,7 +177,11 @@ function drawPicker(filterText) {
   const customInput = document.getElementById("targetCustomInput");
   if (customInput) customInput.oninput = (e) => state.targetCustom = e.target.value;
   const nextBtn = document.getElementById("nextBtn");
-  if (nextBtn) nextBtn.onclick = () => { state.transcript = ""; state.tags.clear(); go("#/voice"); };
+  if (nextBtn) nextBtn.onclick = () => {
+    state.transcript = ""; state.tags.clear();
+    state.recordDate = todayInputStr(); state.period = "";
+    go("#/voice");
+  };
 }
 async function onAddStudent() {
   const klass = prompt("班級（例如 210）：");
@@ -198,6 +216,17 @@ function renderVoice() {
   const html = `
     <div class="topbar">${backBtn()}<div class="title">語音輸入紀錄</div></div>
     <div class="ctx-chip">${state.selectedStudent.klass || ""}${state.selectedStudent.name}．${state.selectedStudent.grade || ""}．對象：${targetLabel}</div>
+    <section class="sec" style="padding-top:2px;">
+      <div class="sec-label">紀錄時間</div>
+      <div style="display:flex;gap:10px;">
+        <input type="date" id="recordDateInput" value="${state.recordDate}" style="flex:1;padding:10px;border:1px solid var(--border);border-radius:var(--radius-sm);font-size:13.5px;background:var(--surface);color:var(--text);">
+        <select id="periodSelect" style="flex:1;padding:10px;border:1px solid var(--border);border-radius:var(--radius-sm);font-size:13.5px;background:var(--surface);color:var(--text);">
+          <option value="">節次（選填）</option>
+          ${PERIOD_OPTIONS.map(p => `<option value="${p}" ${state.period === p ? "selected" : ""}>${p}</option>`).join("")}
+        </select>
+      </div>
+      ${state.period === "其他" ? `<input id="periodCustomInput" placeholder="請輸入節次／時段" value="${state.periodCustom || ""}" style="margin-top:8px;width:100%;padding:10px;border:1px solid var(--border);border-radius:var(--radius-sm);font-size:13.5px;">` : ""}
+    </section>
     <div class="mic-area">
       <button class="mic-btn" id="micBtn">${icon('<rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/>')}</button>
       <div class="mic-label" id="micLabel">${isSpeechSupported() ? "點擊開始語音輸入" : "此瀏覽器不支援語音輸入，請直接輸入文字"}</div>
@@ -220,6 +249,10 @@ function attachVoiceHandlers() {
   document.getElementById("backBtn").onclick = () => go("#/pick");
   const box = document.getElementById("transcriptBox");
   box.oninput = (e) => state.transcript = e.target.value;
+  document.getElementById("recordDateInput").onchange = (e) => { state.recordDate = e.target.value || todayInputStr(); };
+  document.getElementById("periodSelect").onchange = (e) => { state.period = e.target.value; renderVoice(); };
+  const periodCustomInput = document.getElementById("periodCustomInput");
+  if (periodCustomInput) periodCustomInput.oninput = (e) => state.periodCustom = e.target.value;
   document.querySelectorAll(".tag-pill").forEach(p => p.onclick = () => {
     const t = p.dataset.tag;
     if (state.tags.has(t)) state.tags.delete(t); else state.tags.add(t);
@@ -255,10 +288,14 @@ function attachVoiceHandlers() {
 }
 
 // ---------------- 產生訊息（樣板文字，非 AI） ----------------
+function currentPeriodLabel() {
+  return state.period === "其他" ? (state.periodCustom || "") : state.period;
+}
 function buildMessage(kind) {
   const s = state.selectedStudent;
-  const today = new Date();
-  const dateStr = `${today.getMonth() + 1}/${today.getDate()}`;
+  const [y, m, d] = state.recordDate.split("-");
+  const periodLabel = currentPeriodLabel();
+  const dateStr = `${Number(m)}/${Number(d)}${periodLabel ? " " + periodLabel : ""}`;
   const content = state.transcript.trim();
   if (kind === "teacher") {
     return `○○老師您好，${dateStr} 與${s.klass || ""}${s.name}談話，內容摘要如下：\n${content}\n以上提供您參考，如有需要請再與我聯繫，謝謝老師！`;
@@ -305,8 +342,7 @@ function drawMessages() {
     const msgBox = document.getElementById("msgBox");
     if (isTeacher) state._teacherMsg = msgBox.value; else state._parentMsg = msgBox.value;
     const s = state.selectedStudent;
-    const today = new Date();
-    const dateStr = today.toISOString().slice(0, 10).replace(/-/g, "/");
+    const dateStr = inputDateToDisplay(state.recordDate);
     const ref = await data.addRecord({
       studentId: s.id,
       studentDisplay: `${s.klass || ""}${s.name}`,
@@ -316,7 +352,8 @@ function drawMessages() {
       teacherMessage: state._teacherMsg,
       parentMessage: state._parentMsg,
       tags: Array.from(state.tags),
-      date: dateStr
+      date: dateStr,
+      period: currentPeriodLabel()
     });
     state.lastRecord = { id: ref.id, studentDisplay: `${s.klass || ""}${s.name}` };
     toast("已上傳雲端");
@@ -455,7 +492,8 @@ async function renderAnalysis() {
     </div>
     <div id="anaArea"></div>`;
   document.getElementById("content").innerHTML = html;
-  document.getElementById("anaStudentSelect").onchange = async (e) => {
+  const anaSelect = document.getElementById("anaStudentSelect");
+  anaSelect.onchange = async (e) => {
     const sid = e.target.value;
     const area = document.getElementById("anaArea");
     if (!sid) { area.innerHTML = ""; return; }
@@ -477,9 +515,89 @@ async function renderAnalysis() {
       </div>
       ${months.length > 1 ? `<div class="card" style="margin:0 20px 16px;"><div class="sec-label">每月紀錄次數趨勢</div>
         <svg width="100%" height="70" viewBox="0 0 280 70"><polyline points="${points}" fill="none" stroke="var(--sage)" stroke-width="2.5"/></svg></div>` : ""}
-      <section class="sec"><div class="sec-label">歷史紀錄</div>
-        ${records.map(r => `<div class="timeline-item"><span class="timeline-date">${r.date}</span><span class="timeline-target">${r.target}</span><div class="timeline-text">${r.content}</div></div>`).join("")}
+      <section class="sec"><div class="sec-label">歷史紀錄（點一下可修改）</div>
+        ${records.map(r => `<div class="timeline-item" data-record-id="${r.id}" style="cursor:pointer;"><span class="timeline-date">${r.date}${r.period ? " ．" + r.period : ""}</span><span class="timeline-target">${r.target}</span><div class="timeline-text">${r.content}</div></div>`).join("")}
       </section>`;
+    area.querySelectorAll("[data-record-id]").forEach(el => el.onclick = () => {
+      state.editRecordId = el.dataset.recordId;
+      state.editReturnStudentId = sid;
+      go("#/record-edit");
+    });
+  };
+  if (state.editReturnStudentId) {
+    anaSelect.value = state.editReturnStudentId;
+    state.editReturnStudentId = null;
+    anaSelect.onchange({ target: anaSelect });
+  }
+}
+
+// ---------------- 修改既有紀錄 ----------------
+async function renderRecordEdit() {
+  if (!state.editRecordId) { go("#/analysis"); return; }
+  shell(`<div class="loading">載入中…</div>`, "analysis");
+  const r = await data.getRecord(state.editRecordId);
+  if (!r) { toast("找不到這筆紀錄"); go("#/analysis"); return; }
+  const [y, m, d] = (r.date || "").split("/");
+  const dateInputVal = y && m && d ? `${y}-${String(m).padStart(2, "0")}-${String(d).padStart(2, "0")}` : todayInputStr();
+  const isOtherPeriod = r.period && !PERIOD_OPTIONS.includes(r.period);
+  const html = `
+    <div class="topbar">${backBtn()}<div class="title">修改輔導紀錄</div></div>
+    <div class="ctx-chip">${r.studentDisplay || ""}．${r.grade || ""}</div>
+    <section class="sec">
+      <div class="sec-label">紀錄時間</div>
+      <div style="display:flex;gap:10px;">
+        <input type="date" id="editDateInput" value="${dateInputVal}" style="flex:1;padding:10px;border:1px solid var(--border);border-radius:var(--radius-sm);font-size:13.5px;">
+        <select id="editPeriodSelect" style="flex:1;padding:10px;border:1px solid var(--border);border-radius:var(--radius-sm);font-size:13.5px;">
+          <option value="">節次（選填）</option>
+          ${PERIOD_OPTIONS.map(p => `<option value="${p}" ${r.period === p || (isOtherPeriod && p === "其他") ? "selected" : ""}>${p}</option>`).join("")}
+        </select>
+      </div>
+      ${isOtherPeriod ? `<input id="editPeriodCustom" value="${r.period}" style="margin-top:8px;width:100%;padding:10px;border:1px solid var(--border);border-radius:var(--radius-sm);font-size:13.5px;">` : ""}
+    </section>
+    <section class="sec">
+      <div class="sec-label">對象</div>
+      <div class="target-row">
+        ${["學生本人","家長","導師","自行輸入"].map(t => `<div class="target-pill ${r.target === t || (t === "自行輸入" && !["學生本人","家長","導師"].includes(r.target)) ? "active" : ""}" data-target="${t}">${t}</div>`).join("")}
+      </div>
+      <input id="editTargetCustom" placeholder="自訂對象" value="${!["學生本人","家長","導師"].includes(r.target) ? r.target : ""}" style="margin-top:8px;width:100%;padding:10px;border:1px solid var(--border);border-radius:var(--radius-sm);font-size:13.5px;display:${!["學生本人","家長","導師"].includes(r.target) ? "block" : "none"};">
+    </section>
+    <section class="sec">
+      <div class="sec-label">輔導紀錄內容</div>
+      <textarea class="transcript" id="editContentBox">${r.content || ""}</textarea>
+    </section>
+    <div class="cta-wrap">
+      <button class="cta" id="saveEditBtn">儲存修改</button>
+      <button class="cta secondary" id="deleteRecordBtn" style="margin-top:10px;color:var(--rust);">刪除這筆紀錄</button>
+    </div>`;
+  document.getElementById("content").innerHTML = html;
+  document.getElementById("backBtn").onclick = () => { go("#/analysis"); };
+  let target = r.target;
+  document.querySelectorAll("#content .target-pill").forEach(p => p.onclick = () => {
+    target = p.dataset.target;
+    document.querySelectorAll("#content .target-pill").forEach(x => x.classList.remove("active"));
+    p.classList.add("active");
+    document.getElementById("editTargetCustom").style.display = target === "自行輸入" ? "block" : "none";
+  });
+  document.getElementById("saveEditBtn").onclick = async () => {
+    const dateVal = document.getElementById("editDateInput").value;
+    let period = document.getElementById("editPeriodSelect").value;
+    if (period === "其他") period = document.getElementById("editPeriodCustom")?.value || "其他";
+    let finalTarget = target;
+    if (target === "自行輸入") finalTarget = document.getElementById("editTargetCustom").value || "自行輸入";
+    await data.updateRecord(r.id, {
+      date: inputDateToDisplay(dateVal),
+      period,
+      target: finalTarget,
+      content: document.getElementById("editContentBox").value
+    });
+    toast("已儲存修改");
+    go("#/analysis");
+  };
+  document.getElementById("deleteRecordBtn").onclick = async () => {
+    if (!confirm("確定要刪除這筆輔導紀錄嗎？此動作無法復原。")) return;
+    await data.deleteRecord(r.id);
+    toast("已刪除");
+    go("#/analysis");
   };
 }
 
@@ -490,7 +608,8 @@ function render(_, authError) {
   const routes = {
     home: renderHome, pick: renderPicker, voice: renderVoice,
     messages: renderMessages, "track-add": renderTrackAdd,
-    tracking: renderTracking, iep: renderIep, analysis: renderAnalysis
+    tracking: renderTracking, iep: renderIep, analysis: renderAnalysis,
+    "record-edit": renderRecordEdit
   };
   (routes[route] || renderHome)();
 }

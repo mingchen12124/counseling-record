@@ -74,6 +74,19 @@ export async function getRecordsForStudent(studentId) {
   return list;
 }
 
+export async function getRecord(id) {
+  const snap = await getDoc(doc(db, "records", id));
+  return snap.exists() ? { id: snap.id, ...snap.data() } : null;
+}
+
+export async function updateRecord(id, fields) {
+  return updateDoc(doc(db, "records", id), fields);
+}
+
+export async function deleteRecord(id) {
+  return deleteDoc(doc(db, "records", id));
+}
+
 export async function getRecentRecords(n = 20) {
   const snap = await getDocs(collection(db, "records"));
   const list = snap.docs.map(d => ({ id: d.id, ...d.data() }));
